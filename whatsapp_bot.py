@@ -84,7 +84,8 @@ reply_text = (
 )
 ```
 
+
 bash
-git add requirements.txt
-git commit -m "Add missing requirements.txt"
+git add whatsapp_bot.py
+git commit -m "Fix syntax error"
 git push origin main
