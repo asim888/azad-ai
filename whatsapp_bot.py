@@ -1,12 +1,10 @@
-requirements.txt
-flask
-twilio
-openai
+python
+---- Requirements for Render ----
+flask==2.3.2
+twilio==8.10.0
+openai==1.0.0
 requests
 python-dotenv
-
-
-
 python
 from flask import Flask, request
 from twilio.twiml.messaging_response import MessagingResponse
