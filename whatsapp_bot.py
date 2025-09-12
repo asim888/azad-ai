@@ -1,6 +1,6 @@
 python
 from flask import Flask, request
-from twilio.twiml.messaging_response import MessagingResponse
+from flask_twilio.messaging_response import MessagingResponse
 import requests, json, os, hmac, hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
