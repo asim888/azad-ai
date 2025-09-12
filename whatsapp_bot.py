@@ -1,228 +1,150 @@
+---
 
+✅ whatsapp_bot.py
 
-import os
-import json
-import requests
-import tempfile
-from flask import Flask, request
-from twilio.rest import Client
+python
+from flask import Flask, request, jsonify
+from twilio.twiml.messaging_response import MessagingResponse
+import requests, json, os, hmac, hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
-import openai
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(_name_)
 
-# Environment variables
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP = os.getenv("TWILIO_WHATSAPP_NUMBER")  # e.g. whatsapp:+1234567890
+Environment variables
+TWILIO_PHONE = os.getenv("TWILIO_PHONE")
+INSTAMOJO_API_KEY = os.getenv("INSTAMOJO_API_KEY")
+INSTAMOJO_AUTH_TOKEN = os.getenv("INSTAMOJO_AUTH_TOKEN")
+INSTAMOJO_WEBHOOK_SECRET = os.getenv("INSTAMOJO_WEBHOOK_SECRET")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
-FACEBOOK_ACCESS_TOKEN = os.getenv("FACEBOOK_ACCESS_TOKEN")
-FACEBOOK_PAGE_ID = os.getenv("FACEBOOK_PAGE_ID")
+users_file = "users.json"
 
-openai.api_key = OPENAI_API_KEY
-client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
-
-USERS_FILE = "users.json"
-BP_LOGS_FILE = "bp_logs.json"
-
-
-def load_json(file_path):
-    if not os.path.exists(file_path):
-        with open(file_path, "w") as f:
-            f.write("{}")
-    with open(file_path, "r") as f:
+def load_users():
+    if not os.path.exists(users_file):
+        return {}
+    with open(users_file, "r") as f:
         return json.load(f)
 
+def save_users(users):
+    with open(users_file, "w") as f:
+        json.dump(users, f, indent=2)
 
-def save_json(file_path, data):
-    with open(file_path, "w") as f:
-        json.dump(data, f, indent=2)
-
-
-def send_message(to, body):
-    try:
-        client.messages.create(
-            from_=TWILIO_WHATSAPP,
-            to=f"whatsapp:{to}",
-            body=body
-        )
-    except Exception as e:
-        print(f"❌ Failed to send message to {to}: {e}")
-
-
-def get_gnews_headlines(limit=5):
-    url = f"https://gnews.io/api/v4/top-headlines?token={GNEWS_API_KEY}&lang=en&max={limit}"
-    res = requests.get(url).json()
-    headlines = []
-    if "articles" in res:
-        for art in res["articles"]:
-            headlines.append(f"- {art['title']}")
-    return headlines or ["No news found."]
-
-
-def get_facebook_feed(limit=3):
-    url = f"https://graph.facebook.com/v15.0/{FACEBOOK_PAGE_ID}/posts"
-    params = {
-        "access_token": FACEBOOK_ACCESS_TOKEN,
-        "limit": limit,
-        "fields": "message,story,permalink_url"
+def create_instamojo_payment(phone):
+    url = "https://www.instamojo.com/api/1.1/payment-requests/"
+    headers = {
+        "X-Api-Key": INSTAMOJO_API_KEY,
+        "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
     }
-    res = requests.get(url, params=params).json()
-    posts = []
-    if "data" in res:
-        for post in res["data"]:
-            text = post.get("message") or post.get("story") or "No content"
-            link = post.get("permalink_url", "")
-            posts.append(f"{text}\n{link}")
-    return posts or ["No Facebook posts found."]
-
-
-def get_qibla_direction(lat, lon):
-    url = f"http://api.aladhan.com/v1/qibla/{lat}/{lon}"
-    res = requests.get(url).json()
-    if res.get("code") == 200:
-        return res["data"]["direction"]
+    payload = {
+        "purpose": "Azad AI Subscription",
+        "amount": "99",
+        "buyer_name": phone,
+"phone": phone,
+        "send_email": False,
+        "send_sms": True,
+        "allow_repeated_payments": False,
+        "redirect_url": "https://www.google.com", # Optional
+        "webhook": "https://your-render-url.onrender.com/instamojo_webhook"
+    }
+    response = requests.post(url, data=payload, headers=headers)
+    if response.status_code == 200:
+        return response.json()["payment_request"]["longurl"]
     return None
 
+@app.route("/instamojo_webhook", methods=["POST"])
+def instamojo_webhook():
+    data = request.form.to_dict()
+    received_sig = request.headers.get("X-Instamojo-Signature")
 
-def process_bp_log(user, reading):
-    bp_logs = load_json(BP_LOGS_FILE)
-    if user not in bp_logs:
-        bp_logs[user] = []
-    bp_logs[user].append(reading)
-    save_json(BP_LOGS_FILE, bp_logs)
+    if INSTAMOJO_WEBHOOK_SECRET:
+        payload = "&".join([f"{k}={v}" for k, v in sorted(data.items())])
+        digest = hmac.new(
+            INSTAMOJO_WEBHOOK_SECRET.encode(),
+            payload.encode(),
+            hashlib.sha1
+        ).hexdigest()
+
+        if digest != received_sig:
+            return "Signature mismatch", 400
+
+    if data.get("status") == "Credit":
+        phone = data.get("buyer_phone")
+        users = load_users()
+        users[phone] = {"subscribed": True}
+        save_users(users)
+    return "OK", 200
+
+@app.route("/bot", methods=["POST"])
+def bot():
+    incoming_msg = request.values.get("Body", "").lower()
+
+"Body": "📰 Daily News Headline: ..."
+            }
+            auth = (os.getenv("TWILIO_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+            requests.post(url, data=payload, auth=auth)
+
+if _name_ == "_main_":
+    send_daily_news() # Optional test
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(send_daily_news, "cron", hour=9, minute=0)
+    scheduler.start()
+    app.run()
 
 
-def gpt_answer(question):
-    response = openai.ChatCompletion.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": question}],
-        max_tokens=150
-    )
-    return response.choices[0].message.content.strip()
+---
 
+✅ What this includes:
+- Payment link generation via Instamojo
+- Auto-subscription using webhook
+- WhatsApp interaction via Twilio
+- Daily news scheduler (optional)
+- users.json storage for subscriptions
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    from_number = request.values.get("From", "").replace("whatsapp:", "")
-    incoming_msg = request.values.get("Body", "").strip()
-    num_media = int(request.values.get("NumMedia", 0))
-    reply = ""
+---
 
-    # Voice message handling
-    if num_media > 0:
-        media_type = request.values.get("MediaContentType0", "")
-        media_url = request.values.get("MediaUrl0", "")
-        if "audio" in media_type:
-            audio_response = requests.get(media_url)
-            with tempfile.NamedTemporaryFile(suffix=".ogg") as tmp:
-                tmp.write(audio_response.content)
-                tmp.flush()
-                with open(tmp.name, "rb") as audio_file:
-                    transcript = openai.Audio.transcribe("whisper-1", audio_file)
-                    incoming_msg = transcript["text"].strip()
+Let me know if you want:
+- Voice command handling
+- Facebook feed
+- News API integration
+- Multi-language support (e.g., Roman Urdu)
 
-    msg_lower = incoming_msg.lower()
+Also tell me if you need updated requirements.txt.
 
-    users = load_json(USERS_FILE)
+from_number = request.values.get("From", "").replace("whatsapp:", "")
+    resp = MessagingResponse()
+    msg = resp.message()
+    users = load_users()
 
-    # Handle commands
-    if msg_lower in ["hi", "hello", "start"]:
-        reply = ("Hello! I am Azad AI 🤖.\n"
-                 "You can send commands like:\n"
-                 "- news\n- facebook\n- bp <systolic>/<diastolic>\n"
-                 "- qibla <lat> <lon>\n- navigate <from_lat> <from_lon> <to_lat> <to_lon>\n"
-                 "- ask <your question>")
-    elif msg_lower == "help":
-        reply = ("Commands:\n"
-                 "news - get latest news headlines\n"
-                 "facebook - get Facebook page updates\n"
-                 "bp 120/80 - log blood pressure\n"
-                 "qibla <lat> <lon> - get Qibla direction\n"
-                 "navigate <from_lat> <from_lon> <to_lat> <to_lon> - get Google Maps link\n"
-                 "ask <question> - ask AI\n")
-    elif msg_lower == "news":
-        headlines = get_gnews_headlines()
-        reply = "🗞️ Latest News:\n" + "\n".join(headlines)
-    elif msg_lower == "facebook":
-        posts = get_facebook_feed()
-        reply = "📘 Facebook Updates:\n" + "\n\n".join(posts)
-    elif msg_lower.startswith("bp "):
-        try:
-            bp_values = msg_lower.split(" ")[1].split("/")
-            systolic = int(bp_values[0])
-            diastolic = int(bp_values[1])
-            reading = {"systolic": systolic, "diastolic": diastolic}
-            process_bp_log(from_number, reading)
-            reply = f"✅ Logged your BP reading: {systolic}/{diastolic}"
-        except:
-            reply = "❌ Invalid BP format. Use: bp systolic/diastolic (e.g., bp 120/80)"
-    elif msg_lower.startswith("qibla "):
-        parts = msg_lower.split()
-        if len(parts) == 3:
-            try:
-                lat = float(parts[1])
-                lon = float(parts[2])
-                direction = get_qibla_direction(lat, lon)
-                if direction:
-                    reply = f"🕋 Qibla direction is approx {direction:.1f}° from North."
-                else:
-                    reply = "❌ Could not fetch Qibla direction."
-            except:
-                reply = "❌ Invalid coordinates."
+    if from_number not in users or not users[from_number].get("subscribed"):
+        pay_link = create_instamojo_payment(from_number)
+        if pay_link:
+            msg.body(f"🔒 To subscribe to Azad AI, please pay ₹99:pay_link")
         else:
-            reply = "❌ Usage: qibla <latitude> <longitude>"
-    elif msg_lower.startswith("navigate "):
-        parts = msg_lower.split()
-        if len(parts) == 5:
-            try:
-                from_lat = float(parts[1])
-                from_lon = float(parts[2])
-                to_lat = float(parts[3])
-                to_lon = float(parts[4])
-                maps_url = f"https://www.google.com/maps/dir/{from_lat},{from_lon}/{to_lat},{to_lon}"
-                reply = f"🗺️ Navigation link: {maps_url}"
-            except:
-                reply = "❌ Invalid coordinates."
-        else:
-            reply = "❌ Usage: navigate <from_lat> <from_lon> <to_lat> <to_lon>"
-    elif msg_lower.startswith("ask "):
-        question = incoming_msg[4:].strip()
-        if question:
-            try:
-                answer = gpt_answer(question)
-                reply = answer
-            except:
-                reply = "❌ Sorry, I couldn't get an answer."
-        else:
-            reply = "❌ Please ask a question after 'ask'"
+            msg.body("⚠️ Unable to generate payment link. Try again later.")
+        return str(resp)
+
+    # Your AI logic or command handling here
+    if "news" in incoming_msg:
+        msg.body("📰 Today's news: ...")
+    elif "hi" in incoming_msg:
+        msg.body("👋 Hello! I'm Azad AI. Ask me anything or type 'news' to get updates.")
     else:
-        reply = ("❓ Unknown command.\nSend 'help' for commands list.")
+        msg.body("🤖 I’m thinking... (AI response here)")
+    
+    return str(resp)
 
-    send_message(from_number, reply)
-    return "OK"
+@app.route("/", methods=["GET"])
+def home():
+    return "Azad AI is running!"
 
-
+Scheduler (e.g. for daily news — optional)
 def send_daily_news():
-    users = load_json(USERS_FILE)
-    headlines = get_gnews_headlines()
-    facebook_posts = get_facebook_feed()
-    message = "🗞️ Daily News Update\n\n"
-    message += "Latest Headlines:\n" + "\n".join(headlines) + "\n\n"
-    message += "Facebook Updates:\n" + "\n\n".join(facebook_posts)
-
-    for user, info in users.items():
-        if info.get("plan") == "premium":
-            try:
-                send_message(user, message)
-            except Exception as e:
-                print(f"Failed to send daily news to {user}: {e}")
-
-
-if __name__ == "__main
+    users = load_users()
+    for phone, info in users.items():
+        if info.get("subscribed"):
+            url = f"https://api.twilio.com/2010-04-01/Accounts/{os.getenv('TWILIO_SID')}/Messages.json"
+            payload = {
+                "From": f"whatsapp:{TWILIO_PHONE}",
+                "To": f"whatsapp:{phone}",
