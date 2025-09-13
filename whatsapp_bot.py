@@ -1,12 +1,13 @@
-
+'''python
 from flask import Flask, request
-from flask_twilio.messaging_response import MessagingResponse
+from twilio.twiml.messaging_response import MessagingResponse
 import requests, json, os, hmac, hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-load_dotenv()
+import feedparser
 
 app = Flask(_name_)
+load_dotenv()
 
 Env Variables
 TWILIO_PHONE = os.getenv("TWILIO_PHONE")
@@ -15,6 +16,7 @@ TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 INSTAMOJO_API_KEY = os.getenv("INSTAMOJO_API_KEY")
 INSTAMOJO_AUTH_TOKEN = os.getenv("INSTAMOJO_AUTH_TOKEN")
 INSTAMOJO_WEBHOOK_SECRET = os.getenv("INSTAMOJO_WEBHOOK_SECRET")
+FB_PAGE_TOKEN = os.getenv("FB_PAGE_TOKEN")
 
 users_file = "users.json"
 
@@ -25,102 +27,150 @@ def load_users():
         return json.load(f)
 
 def save_users(users):
-    with open(users_file, "w") as f:
+with open(users_file, "w") as f:
         json.dump(users, f, indent=2)
 
 def create_payment_link(phone):
     url = "https://www.instamojo.com/api/1.1/payment-requests/"
+    payload = {
+        "purpose": "Azad AI Bot Subscription",
+        "amount": "10",
+        "phone": phone,
+        "buyer_name": phone,
+        "redirect_url": "https://example.com/thankyou",
+        "send_email": False,
+        "allow_repeated_payments": False
+    }
     headers = {
         "X-Api-Key": INSTAMOJO_API_KEY,
         "X-Auth-Token": INSTAMOJO_AUTH_TOKEN
     }
+    response = requests.post(url, data=payload, headers=headers)
+    if response.status_code == 200:
+        return response.json()["payment_request"]["longurl"]
+    else:
+        return "Payment link error"
+
+def get_news():
+    hindi = feedparser.parse("https://www.aajtak.in/rssfeed/cms/national-news-109.xml")
+    fb = feedparser.parse("https://www.facebook.com/feeds/page.php?format=rss20&id=100064790306684")
+    top_hindi = hindi.entries[0].title
+    top_fb = fb.entries[0].title
+    roman = top_hindi.encode("ascii", "ignore").decode()
+    return f"*AajTak (Hindi):*top_hindi\n\n*Roman English:*roman\n\n*FB News:*top_fb"
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.form
+    sender = data.get("From", "")
+with open(users_file, "w") as f:
+        json.dump(users, f, indent=2)
+
+def create_payment_link(phone):
+    url = "https://www.instamojo.com/api/1.1/payment-requests/"
     payload = {
-"purpose": "Azad AI Subscription",
-        "amount": "99",
+        "purpose": "Azad AI Bot Subscription",
+        "amount": "10",
         "phone": phone,
         "buyer_name": phone,
-        "send_sms": True,
-        "allow_repeated_payments": False,
-        "webhook": "https://your-render-app.onrender.com/instamojo_webhook"
+        "redirect_url": "https://example.com/thankyou",
+        "send_email": False,
+        "allow_repeated_payments": False
     }
-    r = requests.post(url, data=payload, headers=headers)
-    if r.status_code == 200:
-        return r.json()["payment_request"]["longurl"]
-    return None
+    headers = {
+        "X-Api-Key": INSTAMOJO_API_KEY,
+        "X-Auth-Token": INSTAMOJO_AUTH_TOKEN
+    }
+    response = requests.post(url, data=payload, headers=headers)
+    if response.status_code == 200:
+        return response.json()["payment_request"]["longurl"]
+    else:
+        return "Payment link error"
 
-@app.route("/instamojo_webhook", methods=["POST"])
-def instamojo_webhook():
-    data = request.form.to_dict()
-    received_sig = request.headers.get("X-Instamojo-Signature")
+def get_news():
+    hindi = feedparser.parse("https://www.aajtak.in/rssfeed/cms/national-news-109.xml")
+    fb = feedparser.parse("https://www.facebook.com/feeds/page.php?format=rss20&id=100064790306684")
+    top_hindi = hindi.entries[0].title
+    top_fb = fb.entries[0].title
+    roman = top_hindi.encode("ascii", "ignore").decode()
+    return f"*AajTak (Hindi):*top_hindi\n\n*Roman English:*roman\n\n*FB News:*top_fb"
 
-    if INSTAMOJO_WEBHOOK_SECRET:
-        payload = "&".join([f"{k}={v}" for k, v in sorted(data.items())])
-        digest = hmac.new(
-            INSTAMOJO_WEBHOOK_SECRET.encode(),
-            payload.encode(),
-            hashlib.sha1
-        ).hexdigest()
-        if digest != received_sig:
-            return "Signature mismatch", 400
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.form
+    sender = data.get("From", "")
+msg = data.get("Body", "").strip().lower()
+    phone = sender.split(":")[-1]
+    users = load_users()
 
-    if data.get("status") == "Credit":
-        phone = data.get("buyer_phone")
-        users = load_users()
-        users[phone] = {"subscribed": True}
+    if phone not in users:
+        users[phone] = {"subscribed": False}
         save_users(users)
 
-    return "OK", 200
-
-@app.route("/bot", methods=["POST"])
-def bot():
-    incoming = request.values.get("Body", "").lower()
-requests.post(url, data=payload, auth=(TWILIO_SID, TWILIO_AUTH_TOKEN))
-
-if _name_ == "_main_":
-    send_daily_news()
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(send_daily_news, "cron", hour=9, minute=0)
-    scheduler.start()
-    app.run()
-
-from_number = request.values.get("From", "").replace("whatsapp:", "")
     resp = MessagingResponse()
-    msg = resp.message()
+    reply = ""
 
-    users = load_users()
-    user = users.get(from_number)
+    if "subscribe" in msg:
+        link = create_payment_link(phone)
+        reply = f"Click to pay & subscribe:link"
 
-    if not user or not user.get("subscribed"):
-        pay_link = create_payment_link(from_number)
-        if pay_link:
-            msg.body(f"🔐 Please subscribe to Azad AI for ₹99:pay_link")
-        else:
-            msg.body("⚠️ Could not create payment link. Try again.")
-        return str(resp)
+    elif "news" in msg:
+        reply = get_news()
 
-    # Subscribed user: handle commands
-    if "news" in incoming:
-        msg.body("📰 Today's news headline: ...")
-    elif "hi" in incoming:
-        msg.body("👋 Hello! Ask me anything or type 'news'.")
+    elif "qibla" in msg:
+        reply = "To find Qibla direction, enable location & visit:\nhttps://qiblafinder.withgoogle.com"
+
+    elif "location" in msg:
+        reply = "Send your live location to receive Qibla direction."
+
+    elif "help" in msg:
+        reply = "Commands:\n- news\n- subscribe\n- qibla\n- location\n- help"
+
     else:
-        msg.body("🤖 AI response coming soon...")
+        reply = "Send 'news', 'subscribe', or 'qibla'."
 
+    resp.message(reply)
     return str(resp)
 
-@app.route("/", methods=["GET"])
-def home():
-    return "Azad AI is Live!"
+if _name_ == "_main_":
+    app.run(debug=True)
 
-Optional: Daily news scheduler
-def send_daily_news():
-    users = load_users()
-    for phone, info in users.items():
-        if info.get("subscribed"):
-            url = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
-            payload = {
-                "From": f"whatsapp:{TWILIO_PHONE}",
-                "To": f"whatsapp:{phone}",
-                "Body": "📰 Daily News: ..."
-            }
+
+---
+
+✅ requirements.txt
+
+txt
+Flask==2.3.2
+twilio==8.1.0
+openai==0.27.8
+requests==2.31.0
+apscheduler==3.10.1
+python-dotenv==1.0.0
+feedparser==6.0.11
+gunicorn==21.2.0
+
+
+---
+
+✅ runtime.txt
+
+txt
+python-3.10.12
+
+
+---
+
+✅ .gitignore
+
+txt
+.env
+_pycache_/
+*.pyc
+*.pyo
+*.log
+*.sqlite3
+.DS_Store
+
+
 ---
