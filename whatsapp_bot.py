@@ -1,14 +1,13 @@
-python
+
 from flask import Flask, request
 from flask_twilio.messaging_response import MessagingResponse
 import requests, json, os, hmac, hashlib
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-
 load_dotenv()
 
 app = Flask(_name_)
-python
+
 Env Variables
 TWILIO_PHONE = os.getenv("TWILIO_PHONE")
 TWILIO_SID = os.getenv("TWILIO_SID")
