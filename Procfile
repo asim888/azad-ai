@@ -1,1 +1,1 @@
-web: gunicorn app:app
+gunicorn whatsapp_bot:app:

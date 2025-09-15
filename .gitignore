@@ -1,7 +1,9 @@
-.env
+
 _pycache_/
 *.pyc
 *.pyo
 *.log
 *.sqlite3
+.env
 .DS_Store
+user.json
