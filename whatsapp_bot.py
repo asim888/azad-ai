@@ -257,3 +257,11 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, SystemExit):
         scheduler.shutdown()
         print("🛑 Scheduler shut down gracefully.")
+        @app.route("/health", methods=["GET"])
+def health_check():
+    return {
+        "status": "healthy",
+        "users": len(user_data),
+        "twilio_ready": bool(TWILIO_SID and TWILIO_AUTH_TOKEN and TWILIO_PHONE),
+        "fb_configured": bool(FB_ACCESS_TOKEN and FB_PAGE_ID)
+    }
